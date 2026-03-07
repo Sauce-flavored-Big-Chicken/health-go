@@ -78,6 +78,19 @@ scripts\smart-start.bat -NoMirror   :: 不自动切换 GOPROXY
 scripts\smart-start.bat -Addr :9090 :: 指定监听端口
 ```
 
+## Markdown 文档网页预览
+
+已提供一个静态页面，可直接读取并渲染 Markdown API 文档：
+
+- 页面地址：`/static/docs/index.html`
+- Markdown 文件：`/static/docs/api.md`
+
+启动服务后可直接访问：
+
+```text
+http://127.0.0.1:8080/static/docs/index.html
+```
+
 ## 已迁移内容
 
 - 登录、短信登录、注册

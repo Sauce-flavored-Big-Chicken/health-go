@@ -4,7 +4,7 @@
 ._*
 
 # Go build artifacts
-server
+/server
 health-go.exe
 *.exe
 *.test

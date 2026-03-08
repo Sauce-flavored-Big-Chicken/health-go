@@ -28,6 +28,8 @@ import (
 const (
 	defaultHTTPURL = "http://121.37.25.126/community/public"
 	maxUploadSize  = 40 * 1024 * 1024
+	defaultImage   = "/static/image/f23f9d02-ae1e-4065-9730-42df2e539e20.jpg"
+	defaultAvatar  = "/static/avatar/avatar1.png"
 )
 
 type app struct {
@@ -72,8 +74,19 @@ func main() {
 
 	r := gin.New()
 	r.Use(gin.Logger())
-	r.Use(gin.Recovery())
+	r.Use(gin.CustomRecovery(func(c *gin.Context, recovered any) {
+		respond(c, map[string]any{"code": 500, "msg": "服务内部错误，请稍后重试"})
+		c.Abort()
+	}))
 	r.Use(corsMiddleware())
+	r.HandleMethodNotAllowed = true
+
+	r.NoRoute(func(c *gin.Context) {
+		respond(c, map[string]any{"code": 404, "msg": "接口不存在，请检查请求路径"})
+	})
+	r.NoMethod(func(c *gin.Context) {
+		respond(c, map[string]any{"code": 405, "msg": "请求方法不支持，请检查请求方式"})
+	})
 
 	registerRoutes(r, a)
 
@@ -110,6 +123,13 @@ func loadDotEnv(path string) {
 }
 
 func registerRoutes(r *gin.Engine, a *app) {
+	r.GET("/", func(c *gin.Context) {
+		c.Redirect(http.StatusFound, "/static/docs/index.html")
+	})
+	r.GET("/docs/api.md", func(c *gin.Context) {
+		c.File("智慧健康API接口文档V1.0(3).md")
+	})
+
 	r.POST("/prod-api/api/login", a.login)
 	r.GET("/prod-api/api/SMSCode", a.smsCode)
 	r.POST("/prod-api/api/phone/login", a.phoneLogin)
@@ -134,6 +154,14 @@ func registerRoutes(r *gin.Engine, a *app) {
 	auth.GET("/prod-api/api/notice/list", a.getNoticeList)
 	auth.GET("/prod-api/api/notice/:id", a.getNoticeInfo)
 	auth.PUT("/prod-api/api/readNotice/:id", a.readNotice)
+	auth.GET("/prod-api/api/common/datacard", a.getDataCardList)
+	auth.GET("/prod-api/api/question/questionList/:id/:level", a.getQuestionList)
+	auth.POST("/prod-api/api/question/submit", a.submitQuestionAnswer)
+	auth.GET("/prod-api/api/question/statistics", a.getQuestionStatistics)
+	auth.GET("/prod-api/api/data/list_1", a.getDataList1)
+	auth.GET("/prod-api/api/data/list_2", a.getDataList2)
+	auth.GET("/prod-api/api/data/list_3", a.getDataList3)
+	auth.GET("/prod-api/api/data/list_4", a.getDataList4)
 
 		auth.GET("/prod-api/api/community/list", a.getCommunityList)
 		auth.GET("/prod-api/api/community/dynamic/list", a.getCommunityDynamicList)
@@ -343,6 +371,10 @@ func (a *app) register(c *gin.Context) {
 		respond(c, map[string]any{"code": 400, "msg": "缺少必填字段：userName、passWord、phonenumber、sex"})
 		return
 	}
+	if !isValidPhoneNumber(getParam(c, "phonenumber")) {
+		respond(c, map[string]any{"code": 400, "msg": "手机号格式错误，必须为11位数字"})
+		return
+	}
 	_, err := a.exec(`INSERT INTO tp_user (userName,nickName,passWord,avatar,phonenumber,sex,email,idCard,address,introduction,createTime)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
 		getParam(c, "userName"), getParam(c, "nickName"), getParam(c, "passWord"), getParam(c, "avatar"),
@@ -365,7 +397,7 @@ func (a *app) getUserInfo(c *gin.Context) {
 	row["userId"] = row["id"]
 	row["balance"] = row["money"]
 	row["score"] = row["points"]
-	row["avatar"] = avatarURL(a.baseURL(c), toString(row["avatar"]))
+	row["avatar"] = userAvatarURL(a.baseURL(c), toString(row["avatar"]))
 	respond(c, map[string]any{"code": 200, "msg": "请求成功", "data": row})
 }
 
@@ -390,6 +422,10 @@ func (a *app) updateUserInfo(c *gin.Context) {
 	for _, field := range fields {
 		if !hasParam(c, field.param) {
 			continue
+		}
+		if field.param == "phonenumber" && !isValidPhoneNumber(getParam(c, "phonenumber")) {
+			respond(c, map[string]any{"code": 400, "msg": "手机号格式错误，必须为11位数字"})
+			return
 		}
 		setClauses = append(setClauses, field.column+"=?")
 		args = append(args, getParam(c, field.param))
@@ -458,11 +494,12 @@ func (a *app) resetName(c *gin.Context) {
 }
 
 func (a *app) getAvatarList(c *gin.Context) {
+	baseURL := a.baseURL(c)
 	avatar := []map[string]any{
-		{"id": 1, "avatar": "avatar1.png", "avatarUrl": "/static/avatar/avatar1.png"},
-		{"id": 2, "avatar": "avatar2.png", "avatarUrl": "/static/avatar/avatar2.png"},
-		{"id": 3, "avatar": "avatar3.png", "avatarUrl": "/static/avatar/avatar3.png"},
-		{"id": 4, "avatar": "avatar4.png", "avatarUrl": "/static/avatar/avatar4.png"},
+		{"id": 1, "avatar": "avatar1.png", "avatarUrl": baseURL + "/static/avatar/avatar1.png"},
+		{"id": 2, "avatar": "avatar2.png", "avatarUrl": baseURL + "/static/avatar/avatar2.png"},
+		{"id": 3, "avatar": "avatar3.png", "avatarUrl": baseURL + "/static/avatar/avatar3.png"},
+		{"id": 4, "avatar": "avatar4.png", "avatarUrl": baseURL + "/static/avatar/avatar4.png"},
 	}
 	respond(c, map[string]any{"code": 200, "msg": "请求成功", "data": avatar, "total": 4})
 }
@@ -485,7 +522,7 @@ func (a *app) getContactInfo(c *gin.Context) {
 		respond(c, map[string]any{"code": 400, "msg": "未找到当前登录用户"})
 		return
 	}
-	row, err := a.queryOne(`SELECT relationship,telephone,alternatePhone,createTime FROM tp_contact WHERE status=1 AND uId=?`, id)
+	row, err := a.queryOne(`SELECT name,relationship,telephone,alternatePhone,createTime FROM tp_contact WHERE status=1 AND uId=?`, id)
 	if err != nil || row == nil {
 		respond(c, map[string]any{"code": 400, "msg": "未找到联系人信息"})
 		return
@@ -504,6 +541,7 @@ func (a *app) updateContactInfo(c *gin.Context) {
 		param  string
 		column string
 	}{
+		{param: "name", column: "name"},
 		{param: "relationship", column: "relationship"},
 		{param: "telephone", column: "telephone"},
 		{param: "alternatePhone", column: "alternatePhone"},
@@ -595,6 +633,272 @@ func (a *app) readNotice(c *gin.Context) {
 		return
 	}
 	respond(c, map[string]any{"code": 200, "msg": "请求成功"})
+}
+
+func (a *app) getDataCardList(c *gin.Context) {
+	rows, err := a.queryRows(`SELECT id,title,num,unit,icon,trend FROM tp_datacard WHERE status=1 ORDER BY id`)
+	if err != nil || len(rows) == 0 {
+		respond(c, map[string]any{"code": 403, "msg": "未找到数据卡片数据"})
+		return
+	}
+	baseURL := a.baseURL(c)
+	for i := range rows {
+		rows[i]["icon"] = mediaURL(baseURL, toString(rows[i]["icon"]), "/static/image/")
+		rows[i]["trend"] = mediaURL(baseURL, toString(rows[i]["trend"]), "/static/image/")
+	}
+	respond(c, map[string]any{"code": 200, "msg": "请求成功", "data": rows, "total": len(rows)})
+}
+
+func (a *app) getQuestionList(c *gin.Context) {
+	moduleID := c.Param("id")
+	level := c.Param("level")
+	limit := intParam(c, "count", 5)
+	if limit <= 0 {
+		limit = 5
+	}
+	rows, err := a.queryRows(`SELECT id,questionType,question,optionA,optionB,optionC,optionD,optionE,optionF,answer,analysis,parseText,score
+		FROM tp_question_bank WHERE status=1 AND moduleId=? AND level=? ORDER BY RANDOM() LIMIT ?`, moduleID, level, limit)
+	if err != nil || len(rows) == 0 {
+		respond(c, map[string]any{"code": 403, "msg": "未找到该题库等级的题目"})
+		return
+	}
+	for i := range rows {
+		parseText := strings.TrimSpace(toString(rows[i]["parseText"]))
+		analysis := strings.TrimSpace(toString(rows[i]["analysis"]))
+		switch {
+		case parseText == "" && analysis != "":
+			rows[i]["parseText"] = analysis
+		}
+		delete(rows[i], "analysis")
+	}
+	respond(c, map[string]any{"code": 200, "msg": "请求成功", "data": rows, "total": len(rows)})
+}
+
+func (a *app) submitQuestionAnswer(c *gin.Context) {
+	uid := mustUID(c)
+	if uid == "" {
+		respond(c, map[string]any{"code": 400, "msg": "提交答案失败，请先登录"})
+		return
+	}
+	qID := getParam(c, "qId")
+	answer := getParam(c, "answer")
+	scoreStr := strings.TrimSpace(getParam(c, "score"))
+	if qID == "" || answer == "" {
+		respond(c, map[string]any{"code": 400, "msg": "qId、answer 不能为空"})
+		return
+	}
+	score := 0
+	var err error
+	if scoreStr != "" {
+		score, err = strconv.Atoi(scoreStr)
+		if err != nil {
+			respond(c, map[string]any{"code": 400, "msg": "score 必须是数字"})
+			return
+		}
+	}
+	question, err := a.queryOne(`SELECT id,moduleId,level,answer,score FROM tp_question_bank WHERE id=? AND status=1`, qID)
+	if err != nil || question == nil {
+		respond(c, map[string]any{"code": 403, "msg": "未找到要提交的题目"})
+		return
+	}
+	correctAnswer := strings.TrimSpace(toString(question["answer"]))
+	questionScore := intFromAny(question["score"])
+	isCorrect := strings.EqualFold(strings.TrimSpace(answer), correctAnswer)
+	if isCorrect && score == 0 {
+		score = questionScore
+	}
+	if !isCorrect && score != 0 {
+		score = 0
+	}
+	now := time.Now().Format("2006-01-02 15:04:05")
+	_, err = a.exec(`INSERT INTO tp_question_record (id,userUid,qId,moduleId,level,answer,isCorrect,score,createTime,status)
+		VALUES (?,?,?,?,?,?,?,?,?,1)`,
+		newID(), uid, qID, toString(question["moduleId"]), toString(question["level"]), answer, boolToInt(isCorrect), score, now)
+	if err != nil {
+		respond(c, map[string]any{"code": 403, "msg": "提交答案失败，请稍后重试"})
+		return
+	}
+	respond(c, map[string]any{
+		"code": 200,
+		"msg":  "请求成功",
+		"data": map[string]any{
+			"qId":           qID,
+			"userAnswer":    answer,
+			"isCorrect":     boolToInt(isCorrect),
+			"correctAnswer": correctAnswer,
+			"score":         score,
+		},
+	})
+}
+
+func (a *app) getQuestionStatistics(c *gin.Context) {
+	uid := mustUID(c)
+	if uid == "" {
+		respond(c, map[string]any{"code": 400, "msg": "获取答题统计失败，请先登录"})
+		return
+	}
+	moduleID := strings.TrimSpace(getParam(c, "moduleId"))
+	if moduleID == "" {
+		moduleID = "1"
+	}
+
+	totalAnswered := 0
+	totalCorrect := 0
+	totalWrong := 0
+	todayAnswered := 0
+	today := time.Now().Format("2006-01-02")
+
+	totalRow, err := a.queryOne(`SELECT COUNT(1) AS total FROM tp_question_record WHERE status=1 AND userUid=? AND moduleId=?`, uid, moduleID)
+	if err == nil && totalRow != nil {
+		totalAnswered = intFromAny(totalRow["total"])
+	}
+	correctRow, err := a.queryOne(`SELECT COUNT(1) AS total FROM tp_question_record WHERE status=1 AND userUid=? AND moduleId=? AND isCorrect=1`, uid, moduleID)
+	if err == nil && correctRow != nil {
+		totalCorrect = intFromAny(correctRow["total"])
+	}
+	totalWrong = totalAnswered - totalCorrect
+	if totalWrong < 0 {
+		totalWrong = 0
+	}
+	todayRow, err := a.queryOne(`SELECT COUNT(1) AS total FROM tp_question_record WHERE status=1 AND userUid=? AND moduleId=? AND substr(createTime,1,10)=?`, uid, moduleID, today)
+	if err == nil && todayRow != nil {
+		todayAnswered = intFromAny(todayRow["total"])
+	}
+
+	accuracy := 0.0
+	if totalAnswered > 0 {
+		accuracy = float64(totalCorrect) * 100.0 / float64(totalAnswered)
+	}
+
+	levelRows, err := a.queryRows(`SELECT DISTINCT level FROM tp_question_bank WHERE status=1 AND moduleId=? ORDER BY level`, moduleID)
+	if err != nil || len(levelRows) == 0 {
+		respond(c, map[string]any{"code": 403, "msg": "未找到该模块题库，无法统计"})
+		return
+	}
+
+	progress := make([]map[string]any, 0, len(levelRows))
+	for _, lv := range levelRows {
+		level := strings.TrimSpace(toString(lv["level"]))
+		if level == "" {
+			continue
+		}
+
+		totalQuestions := 0
+		completedQuestions := 0
+		levelCorrect := 0
+		levelWrong := 0
+
+		levelTotalRow, qErr := a.queryOne(`SELECT COUNT(1) AS total FROM tp_question_bank WHERE status=1 AND moduleId=? AND level=?`, moduleID, level)
+		if qErr == nil && levelTotalRow != nil {
+			totalQuestions = intFromAny(levelTotalRow["total"])
+		}
+		completedRow, qErr := a.queryOne(`SELECT COUNT(DISTINCT qId) AS total FROM tp_question_record WHERE status=1 AND userUid=? AND moduleId=? AND level=?`, uid, moduleID, level)
+		if qErr == nil && completedRow != nil {
+			completedQuestions = intFromAny(completedRow["total"])
+		}
+		correctLevelRow, qErr := a.queryOne(`SELECT COUNT(1) AS total FROM tp_question_record WHERE status=1 AND userUid=? AND moduleId=? AND level=? AND isCorrect=1`, uid, moduleID, level)
+		if qErr == nil && correctLevelRow != nil {
+			levelCorrect = intFromAny(correctLevelRow["total"])
+		}
+		wrongLevelRow, qErr := a.queryOne(`SELECT COUNT(1) AS total FROM tp_question_record WHERE status=1 AND userUid=? AND moduleId=? AND level=? AND isCorrect=0`, uid, moduleID, level)
+		if qErr == nil && wrongLevelRow != nil {
+			levelWrong = intFromAny(wrongLevelRow["total"])
+		}
+
+		progressPercent := 0.0
+		if totalQuestions > 0 {
+			progressPercent = float64(completedQuestions) * 100.0 / float64(totalQuestions)
+		}
+
+		progress = append(progress, map[string]any{
+			"level":              level,
+			"totalQuestions":     totalQuestions,
+			"completedQuestions": completedQuestions,
+			"correctCount":       levelCorrect,
+			"wrongCount":         levelWrong,
+			"progressPercent":    fmt.Sprintf("%.2f%%", progressPercent),
+		})
+	}
+
+	respond(c, map[string]any{
+		"code": 200,
+		"msg":  "请求成功",
+		"data": map[string]any{
+			"answerAccuracyPercent": fmt.Sprintf("%.2f%%", accuracy),
+			"totalAnswered":         totalAnswered,
+			"totalWrong":            totalWrong,
+			"todayAnswered":         todayAnswered,
+			"levelProgress":         progress,
+		},
+	})
+}
+
+func (a *app) getDataList1(c *gin.Context) {
+	series, err := a.pollutionSeries([]string{"aqi", "pm2_5", "pm10", "so2", "no2", "co"})
+	if err != nil || len(series) == 0 {
+		respond(c, map[string]any{"code": 403, "msg": "未找到污染物趋势数据"})
+		return
+	}
+	respond(c, map[string]any{"code": 200, "msg": "请求成功", "data": series})
+}
+
+func (a *app) getDataList2(c *gin.Context) {
+	series, err := a.pollutionSeries([]string{"pm2_5", "pm10", "so2", "no2"})
+	if err != nil || len(series) == 0 {
+		respond(c, map[string]any{"code": 403, "msg": "未找到污染物对比数据"})
+		return
+	}
+	respond(c, map[string]any{"code": 200, "msg": "请求成功", "data": series})
+}
+
+func (a *app) getDataList3(c *gin.Context) {
+	series, err := a.pollutionSeries([]string{"aqi", "pm2_5", "pm10", "so2", "no2", "co"})
+	if err != nil || len(series) == 0 {
+		respond(c, map[string]any{"code": 403, "msg": "未找到污染物分析数据"})
+		return
+	}
+	respond(c, map[string]any{"code": 200, "msg": "请求成功", "data": series})
+}
+
+func (a *app) getDataList4(c *gin.Context) {
+	row, err := a.queryOne(`SELECT aqi,pm2_5,pm10,so2,no2,co FROM tp_pollution_daily WHERE status=1 ORDER BY recordDate DESC LIMIT 1`)
+	if err != nil || row == nil {
+		respond(c, map[string]any{"code": 403, "msg": "未找到污染物最新数据"})
+		return
+	}
+	data := []map[string]any{
+		{"name": "aqi", "data": numberFromAny(row["aqi"])},
+		{"name": "pm2.5", "data": numberFromAny(row["pm2_5"])},
+		{"name": "pm10", "data": numberFromAny(row["pm10"])},
+		{"name": "so2", "data": numberFromAny(row["so2"])},
+		{"name": "no2", "data": numberFromAny(row["no2"])},
+		{"name": "co", "data": numberFromAny(row["co"])},
+	}
+	respond(c, map[string]any{"code": 200, "msg": "请求成功", "data": data})
+}
+
+func (a *app) pollutionSeries(fields []string) ([]map[string]any, error) {
+	rows, err := a.queryRows(`SELECT recordDate,aqi,pm2_5,pm10,so2,no2,co
+		FROM tp_pollution_daily WHERE status=1 ORDER BY recordDate DESC LIMIT 7`)
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	// API expects chronological order.
+	for i, j := 0, len(rows)-1; i < j; i, j = i+1, j-1 {
+		rows[i], rows[j] = rows[j], rows[i]
+	}
+	out := make([]map[string]any, 0, len(fields))
+	for _, field := range fields {
+		values := make([]any, 0, len(rows))
+		for _, row := range rows {
+			values = append(values, numberFromAny(row[field]))
+		}
+		out = append(out, map[string]any{
+			"name": displayPollutionField(field),
+			"data": values,
+		})
+	}
+	return out, nil
 }
 
 func (a *app) getCommunityList(c *gin.Context) {
@@ -786,7 +1090,7 @@ func (a *app) getNewsInfo(c *gin.Context) {
 		respond(c, map[string]any{"code": 403, "msg": "未找到该新闻详情"})
 		return
 	}
-	row["cover"] = a.baseURL(c) + "/static/image/" + toString(row["cover"])
+	row["cover"] = newsCoverURL(a.baseURL(c), toString(row["cover"]))
 	respond(c, map[string]any{"code": 200, "msg": "请求成功", "data": row})
 }
 
@@ -872,12 +1176,13 @@ func (a *app) upload(c *gin.Context) {
 
 	relPath := "uploads/" + saveName
 	url := "/storage/" + relPath
+	fullURL := mediaURL(a.baseURL(c), url, "")
 	respond(c, map[string]any{
 		"code": 200,
 		"msg":  "请求成功",
 		"data": map[string]any{
 			"path":         relPath,
-			"avatar":       url,
+			"avatar":       fullURL,
 			"size":         fileHeader.Size,
 			"name":         saveName,
 			"mime":         fileHeader.Header.Get("Content-Type"),
@@ -894,6 +1199,7 @@ func (a *app) getMaterialInfo(c *gin.Context) {
 		respond(c, map[string]any{"code": 403, "msg": "未找到该素材信息"})
 		return
 	}
+	row["url"] = mediaURL(a.baseURL(c), toString(row["url"]), "")
 	respond(c, map[string]any{"code": 200, "msg": "请求成功", "data": row})
 }
 
@@ -937,7 +1243,7 @@ func (a *app) uploadAnswerMaterial(c *gin.Context) {
 		"data": map[string]any{
 			"materialName": materialName,
 			"fileName":     saveName,
-			"url":          url,
+			"url":          mediaURL(a.baseURL(c), url, ""),
 		},
 	})
 }
@@ -1300,7 +1606,7 @@ func respond(c *gin.Context, payload map[string]any) {
 
 func withNewsCover(httpURL string, rows []map[string]any) []map[string]any {
 	for i := range rows {
-		rows[i]["cover"] = httpURL + "/static/image/" + toString(rows[i]["cover"])
+		rows[i]["cover"] = newsCoverURL(httpURL, toString(rows[i]["cover"]))
 	}
 	return rows
 }
@@ -1326,6 +1632,99 @@ func avatarURL(baseURL, avatar string) string {
 	}
 }
 
+func userAvatarURL(baseURL, raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return baseURL + defaultAvatar
+	}
+	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		if localPath, ok := localMediaPathFromAbsoluteURL(baseURL, raw); ok && !mediaFileExists(localPath) {
+			return baseURL + defaultAvatar
+		}
+		return raw
+	}
+	if strings.HasPrefix(raw, "/") {
+		if isLocalMediaPath(raw) && !mediaFileExists(raw) {
+			return baseURL + defaultAvatar
+		}
+		return baseURL + raw
+	}
+	candidate := "/static/avatar/" + raw
+	if !mediaFileExists(candidate) {
+		return baseURL + defaultAvatar
+	}
+	return baseURL + candidate
+}
+
+func newsCoverURL(baseURL, raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return baseURL + defaultImage
+	}
+	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		if localPath, ok := localMediaPathFromAbsoluteURL(baseURL, raw); ok && !mediaFileExists(localPath) {
+			return baseURL + defaultImage
+		}
+		return raw
+	}
+	if strings.HasPrefix(raw, "/") {
+		if isLocalMediaPath(raw) && !mediaFileExists(raw) {
+			return baseURL + defaultImage
+		}
+		return baseURL + raw
+	}
+	candidate := "/static/image/" + raw
+	if !mediaFileExists(candidate) {
+		return baseURL + defaultImage
+	}
+	return baseURL + candidate
+}
+
+func isLocalMediaPath(p string) bool {
+	return strings.HasPrefix(p, "/static/") || strings.HasPrefix(p, "/storage/")
+}
+
+func localMediaPathFromAbsoluteURL(baseURL, raw string) (string, bool) {
+	mediaURL, err := url.Parse(raw)
+	if err != nil || mediaURL.Host == "" || !isLocalMediaPath(mediaURL.Path) {
+		return "", false
+	}
+	base, err := url.Parse(baseURL)
+	if err != nil || base.Host == "" {
+		return "", false
+	}
+	if !strings.EqualFold(mediaURL.Hostname(), base.Hostname()) {
+		return "", false
+	}
+	if effectivePort(mediaURL) != effectivePort(base) {
+		return "", false
+	}
+	return mediaURL.Path, true
+}
+
+func effectivePort(u *url.URL) string {
+	port := u.Port()
+	if port != "" {
+		return port
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "https":
+		return "443"
+	default:
+		return "80"
+	}
+}
+
+func mediaFileExists(p string) bool {
+	if !isLocalMediaPath(p) {
+		return true
+	}
+	rel := strings.TrimPrefix(p, "/")
+	fsPath := filepath.Join("public", filepath.FromSlash(rel))
+	_, err := os.Stat(fsPath)
+	return err == nil
+}
+
 func localNeighborhoodPostImage(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -1340,12 +1739,12 @@ func localNeighborhoodPostImage(raw string) string {
 	name := pathBase(raw)
 	switch name {
 	case "news_hot.png", "Gk08RijaAAAyuFq.png":
-		return "/static/image/f23f9d02-ae1e-4065-9730-42df2e539e20.jpg"
+		return defaultImage
 	default:
 		if name != "" {
 			return "/static/image/" + name
 		}
-		return "/static/image/f23f9d02-ae1e-4065-9730-42df2e539e20.jpg"
+		return defaultImage
 	}
 }
 
@@ -1376,6 +1775,97 @@ func toString(v any) string {
 		return ""
 	}
 	return fmt.Sprintf("%v", v)
+}
+
+func intFromAny(v any) int {
+	switch vv := v.(type) {
+	case int:
+		return vv
+	case int64:
+		return int(vv)
+	case float64:
+		return int(vv)
+	case []byte:
+		n, _ := strconv.Atoi(string(vv))
+		return n
+	default:
+		n, _ := strconv.Atoi(fmt.Sprintf("%v", vv))
+		return n
+	}
+}
+
+func numberFromAny(v any) any {
+	switch vv := v.(type) {
+	case int:
+		return vv
+	case int64:
+		return vv
+	case float64:
+		// Keep integers clean in JSON output.
+		if vv == float64(int64(vv)) {
+			return int64(vv)
+		}
+		return vv
+	case []byte:
+		s := string(vv)
+		if strings.Contains(s, ".") {
+			f, err := strconv.ParseFloat(s, 64)
+			if err == nil {
+				if f == float64(int64(f)) {
+					return int64(f)
+				}
+				return f
+			}
+		}
+		if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+			return n
+		}
+		return s
+	default:
+		s := fmt.Sprintf("%v", vv)
+		if strings.Contains(s, ".") {
+			f, err := strconv.ParseFloat(s, 64)
+			if err == nil {
+				if f == float64(int64(f)) {
+					return int64(f)
+				}
+				return f
+			}
+		}
+		if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+			return n
+		}
+		return s
+	}
+}
+
+func boolToInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
+}
+
+func displayPollutionField(name string) string {
+	switch name {
+	case "pm2_5":
+		return "pm2.5"
+	default:
+		return name
+	}
+}
+
+func isValidPhoneNumber(phone string) bool {
+	phone = strings.TrimSpace(phone)
+	if len(phone) != 11 {
+		return false
+	}
+	for _, r := range phone {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func getEnv(key, def string) string {
@@ -1560,11 +2050,67 @@ func (a *app) ensureSupplementalTables() error {
 			content TEXT,
 			status TEXT
 		)`,
+		`CREATE TABLE IF NOT EXISTS tp_datacard (
+			id INTEGER PRIMARY KEY,
+			title TEXT,
+			num TEXT,
+			unit TEXT,
+			icon TEXT,
+			trend TEXT,
+			status TEXT
+		)`,
+		`CREATE TABLE IF NOT EXISTS tp_question_bank (
+			id INTEGER PRIMARY KEY,
+			moduleId TEXT,
+			level TEXT,
+			questionType TEXT,
+			question TEXT,
+			optionA TEXT,
+			optionB TEXT,
+			optionC TEXT,
+			optionD TEXT,
+			optionE TEXT,
+			optionF TEXT,
+			answer TEXT,
+			analysis TEXT,
+			parseText TEXT,
+			score INTEGER,
+			status TEXT
+		)`,
+		`CREATE TABLE IF NOT EXISTS tp_question_record (
+			id BIGINT PRIMARY KEY,
+			userUid TEXT,
+			qId INTEGER,
+			moduleId TEXT,
+			level TEXT,
+			answer TEXT,
+			isCorrect INTEGER DEFAULT 0,
+			score INTEGER DEFAULT 0,
+			createTime TEXT,
+			status TEXT
+		)`,
+		`CREATE TABLE IF NOT EXISTS tp_pollution_daily (
+			id INTEGER PRIMARY KEY,
+			recordDate TEXT,
+			aqi REAL,
+			pm2_5 REAL,
+			pm10 REAL,
+			so2 REAL,
+			no2 REAL,
+			co REAL,
+			status TEXT
+		)`,
 	}
 	for _, stmt := range stmts {
 		if _, err := a.db.Exec(stmt); err != nil {
 			return err
 		}
+	}
+	if err := a.ensureContactNameColumn(); err != nil {
+		return err
+	}
+	if err := a.ensureQuestionParseTextColumn(); err != nil {
+		return err
 	}
 	if err := a.seedNeighborhoodData(); err != nil {
 		return err
@@ -1572,10 +2118,143 @@ func (a *app) ensureSupplementalTables() error {
 	if err := a.seedCommunityDynamicData(); err != nil {
 		return err
 	}
+	if err := a.seedDataCardData(); err != nil {
+		return err
+	}
+	if err := a.seedQuestionBankData(); err != nil {
+		return err
+	}
+	if err := a.seedPollutionData(); err != nil {
+		return err
+	}
 	if err := a.normalizeNeighborhoodIDs(); err != nil {
 		return err
 	}
 	return a.normalizeNeighborhoodMedia()
+}
+
+func (a *app) ensureContactNameColumn() error {
+	_, err := a.db.Exec(`ALTER TABLE tp_contact ADD COLUMN name TEXT`)
+	if err == nil {
+		return nil
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "duplicate column") || strings.Contains(msg, "already exists") {
+		return nil
+	}
+	return err
+}
+
+func (a *app) ensureQuestionParseTextColumn() error {
+	_, err := a.db.Exec(`ALTER TABLE tp_question_bank ADD COLUMN parseText TEXT`)
+	if err != nil {
+		msg := strings.ToLower(err.Error())
+		if !strings.Contains(msg, "duplicate column") && !strings.Contains(msg, "already exists") {
+			return err
+		}
+	}
+	if _, err = a.db.Exec(`UPDATE tp_question_bank SET parseText=analysis WHERE (parseText IS NULL OR TRIM(parseText)='') AND analysis IS NOT NULL AND TRIM(analysis)<>''`); err != nil {
+		return err
+	}
+	if _, err = a.db.Exec(`UPDATE tp_question_bank SET analysis=parseText WHERE (analysis IS NULL OR TRIM(analysis)='') AND parseText IS NOT NULL AND TRIM(parseText)<>''`); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (a *app) seedDataCardData() error {
+	row, err := a.queryOne(`SELECT COUNT(1) AS total FROM tp_datacard WHERE status=1`)
+	if err == nil && row != nil && toString(row["total"]) != "0" {
+		return nil
+	}
+	items := []struct {
+		ID    int
+		Title string
+		Num   string
+		Unit  string
+	}{
+		{ID: 1, Title: "AQI 指数", Num: "45", Unit: "优"},
+		{ID: 2, Title: "PM2.5", Num: "22", Unit: "μg/m³"},
+		{ID: 3, Title: "PM10", Num: "48", Unit: "μg/m³"},
+		{ID: 4, Title: "SO2", Num: "10", Unit: "μg/m³"},
+	}
+	for _, item := range items {
+		if _, err = a.exec(`INSERT INTO tp_datacard (id,title,num,unit,icon,trend,status) VALUES (?,?,?,?,?,?,1)`,
+			item.ID, item.Title, item.Num, item.Unit, defaultImage, defaultImage); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (a *app) seedQuestionBankData() error {
+	row, err := a.queryOne(`SELECT COUNT(1) AS total FROM tp_question_bank WHERE status=1`)
+	if err == nil && row != nil && toString(row["total"]) != "0" {
+		return nil
+	}
+	type q struct {
+		ID       int
+		ModuleID string
+		Level    string
+		Type     string
+		Question string
+		A, B, C  string
+		D, E, F  string
+		Answer   string
+		Analysis string
+		Parse    string
+		Score    int
+	}
+	items := []q{
+		{1, "1", "1", "4", "PHP 的数组长度可通过 count() 获取。", "正确", "错误", "", "", "", "", "A", "count() 可以统计数组元素数量。", "count() 可以统计数组元素数量。", 2},
+		{2, "1", "1", "4", "Go 语言中 map 是线程安全的。", "正确", "错误", "", "", "", "", "B", "原生 map 非线程安全，需要加锁或并发安全容器。", "原生 map 非线程安全，需要加锁或并发安全容器。", 2},
+		{3, "1", "1", "4", "SQL 的 WHERE 条件可以省略。", "正确", "错误", "", "", "", "", "A", "无 WHERE 时会影响整表。", "无 WHERE 时会影响整表。", 1},
+		{4, "1", "1", "1", "HTTP 常见成功状态码是？", "200", "404", "500", "302", "", "", "A", "200 表示请求成功。", "200 表示请求成功。", 2},
+		{5, "1", "1", "1", "以下哪个是关系型数据库？", "Redis", "MongoDB", "MySQL", "Kafka", "", "", "C", "MySQL 是关系型数据库。", "MySQL 是关系型数据库。", 2},
+		{6, "1", "2", "1", "JWT 常用于？", "静态资源压缩", "用户认证授权", "数据库分片", "图像处理", "", "", "B", "JWT 常用于认证和鉴权。", "JWT 常用于认证和鉴权。", 2},
+		{7, "1", "2", "4", "RESTful API 通常使用不同 HTTP 方法表达语义。", "正确", "错误", "", "", "", "", "A", "GET/POST/PUT/DELETE 语义明确。", "GET/POST/PUT/DELETE 语义明确。", 2},
+		{8, "1", "2", "1", "下列哪项最适合作为密码存储方式？", "明文", "MD5 无盐", "带盐哈希", "Base64", "", "", "C", "应使用带盐哈希。", "应使用带盐哈希。", 3},
+	}
+	for _, item := range items {
+		if _, err = a.exec(`INSERT INTO tp_question_bank
+			(id,moduleId,level,questionType,question,optionA,optionB,optionC,optionD,optionE,optionF,answer,analysis,parseText,score,status)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)`,
+			item.ID, item.ModuleID, item.Level, item.Type, item.Question,
+			item.A, item.B, item.C, item.D, item.E, item.F, item.Answer, item.Analysis, item.Parse, item.Score); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (a *app) seedPollutionData() error {
+	row, err := a.queryOne(`SELECT COUNT(1) AS total FROM tp_pollution_daily WHERE status=1`)
+	if err == nil && row != nil && toString(row["total"]) != "0" {
+		return nil
+	}
+	type daily struct {
+		AQI, PM25, PM10, SO2, NO2, CO float64
+	}
+	values := []daily{
+		{65, 22, 58, 9, 31, 1.1},
+		{82, 31, 75, 11, 36, 1.2},
+		{95, 38, 88, 12, 40, 1.3},
+		{78, 27, 70, 10, 34, 1.1},
+		{105, 45, 92, 10, 45, 1.5},
+		{88, 33, 81, 9, 39, 1.2},
+		{70, 24, 64, 8, 30, 1.0},
+	}
+	start := time.Now().AddDate(0, 0, -(len(values) - 1))
+	for i, d := range values {
+		day := start.AddDate(0, 0, i).Format("2006-01-02")
+		if _, err = a.exec(`INSERT INTO tp_pollution_daily
+			(id,recordDate,aqi,pm2_5,pm10,so2,no2,co,status)
+			VALUES (?,?,?,?,?,?,?,?,1)`,
+			i+1, day, d.AQI, d.PM25, d.PM10, d.SO2, d.NO2, d.CO); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (a *app) seedNeighborhoodData() error {

@@ -1,14 +1,2 @@
-# macOS
 .DS_Store
 **/.DS_Store
-._*
-
-# Go build artifacts
-/server
-health-go.exe
-*.exe
-*.test
-*.out
-
-# Optional local logs
-*.log

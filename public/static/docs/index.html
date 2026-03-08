@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>智慧健康 API 文档</title>
+  <style>
+    :root {
+      --bg: #f4f1e8;
+      --panel: #fffdf8;
+      --ink: #1f2a24;
+      --muted: #607067;
+      --line: #d9d1c2;
+      --accent: #215f4a;
+      --accent-soft: #d9ebe3;
+      --code: #f2eee4;
+      --shadow: 0 20px 50px rgba(30, 42, 36, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(33, 95, 74, 0.58) rgba(217, 235, 227, 0.7);
+    }
+
+    *::-webkit-scrollbar {
+      width: 12px;
+      height: 12px;
+    }
+
+    *::-webkit-scrollbar-track {
+      background: rgba(217, 235, 227, 0.72);
+      border-radius: 999px;
+    }
+
+    *::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, rgba(33, 95, 74, 0.72), rgba(78, 120, 101, 0.78));
+      border-radius: 999px;
+      border: 2px solid rgba(217, 235, 227, 0.72);
+    }
+
+    *::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(180deg, rgba(26, 72, 56, 0.84), rgba(63, 104, 85, 0.88));
+    }
+
+    *::-webkit-scrollbar-corner {
+      background: rgba(217, 235, 227, 0.72);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(33, 95, 74, 0.12), transparent 28%),
+        radial-gradient(circle at right 15%, rgba(169, 128, 63, 0.14), transparent 24%),
+        linear-gradient(180deg, #f6f3eb 0%, var(--bg) 100%);
+      font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+
+    .shell {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 32px 20px 72px;
+    }
+
+    .hero {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .eyebrow {
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(32px, 6vw, 56px);
+      line-height: 1.02;
+      letter-spacing: -0.03em;
+    }
+
+    .subtitle {
+      margin: 0;
+      max-width: 720px;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .badge,
+    .button {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 10px 14px;
+      font-size: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.72);
+      backdrop-filter: blur(12px);
+    }
+
+    .button {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid rgba(217, 209, 194, 0.9);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      overflow: visible;
+    }
+
+    .doc-layout {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      min-height: 60vh;
+      align-items: start;
+    }
+
+    .toc {
+      border-right: 1px solid rgba(217, 209, 194, 0.75);
+      background: linear-gradient(180deg, rgba(217, 235, 227, 0.45), rgba(255, 253, 248, 0.65));
+      padding: 20px 16px 24px;
+      position: sticky;
+      top: 24px;
+      align-self: start;
+      max-height: calc(100vh - 48px);
+      overflow: auto;
+      scrollbar-color: rgba(33, 95, 74, 0.7) rgba(196, 223, 212, 0.9);
+    }
+
+    .toc-title {
+      margin: 0 0 14px;
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--accent);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .toc-list {
+      display: grid;
+      gap: 4px;
+    }
+
+    .toc-list a {
+      display: block;
+      color: var(--ink);
+      text-decoration: none;
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 14px;
+      line-height: 1.4;
+      transition: background-color 120ms ease, color 120ms ease, transform 120ms ease;
+    }
+
+    .toc-list a.level-1 {
+      font-weight: 700;
+    }
+
+    .toc-list a.level-2 {
+      padding-left: 18px;
+      color: #31463c;
+    }
+
+    .toc-list a.level-3 {
+      padding-left: 28px;
+      color: #486056;
+      font-size: 13px;
+    }
+
+    .toc-list a:hover,
+    .toc-list a.active {
+      background: rgba(33, 95, 74, 0.12);
+      color: var(--accent);
+      transform: translateX(2px);
+    }
+
+    .status {
+      padding: 18px 22px;
+      border-bottom: 1px solid rgba(217, 209, 194, 0.75);
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .content {
+      padding: clamp(20px, 4vw, 40px);
+    }
+
+    .content > :first-child {
+      margin-top: 0;
+    }
+
+    .content h1,
+    .content h2,
+    .content h3,
+    .content h4 {
+      scroll-margin-top: 24px;
+    }
+
+    .content h1 {
+      font-size: 34px;
+      margin: 28px 0 16px;
+    }
+
+    .content h2 {
+      margin: 28px 0 14px;
+      padding-top: 10px;
+      font-size: 24px;
+      border-top: 1px solid rgba(217, 209, 194, 0.7);
+    }
+
+    .content h3 {
+      margin: 22px 0 10px;
+      font-size: 19px;
+      color: var(--accent);
+    }
+
+    .content p,
+    .content li {
+      line-height: 1.8;
+      font-size: 15px;
+    }
+
+    .content code {
+      padding: 0.18em 0.42em;
+      border-radius: 6px;
+      background: var(--code);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.92em;
+    }
+
+    .content pre {
+      position: relative;
+      overflow: auto;
+      padding: 16px 96px 16px 18px;
+      border-radius: 16px;
+      background: #1c2521;
+      color: #edf4ef;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+      scrollbar-color: rgba(201, 229, 217, 0.82) rgba(49, 63, 56, 0.92);
+    }
+
+    .content pre::-webkit-scrollbar-track {
+      background: rgba(49, 63, 56, 0.92);
+    }
+
+    .content pre::-webkit-scrollbar-thumb {
+      background: linear-gradient(180deg, rgba(201, 229, 217, 0.82), rgba(132, 166, 149, 0.9));
+      border-color: rgba(49, 63, 56, 0.92);
+    }
+
+    .content pre code {
+      padding: 0;
+      background: transparent;
+      color: inherit;
+      line-height: 1.72;
+    }
+
+    .copy-button {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 68px;
+      padding: 6px 12px;
+      border: 1px solid rgba(201, 229, 217, 0.34);
+      border-radius: 999px;
+      background: rgba(28, 37, 33, 0.68);
+      backdrop-filter: blur(8px);
+      color: #edf4ef;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
+    }
+
+    .copy-button:hover {
+      background: rgba(201, 229, 217, 0.16);
+      border-color: rgba(201, 229, 217, 0.56);
+      transform: translateY(-1px);
+    }
+
+    .copy-button.copied {
+      background: rgba(61, 135, 102, 0.28);
+      border-color: rgba(150, 221, 190, 0.68);
+    }
+
+    .copy-button.failed {
+      background: rgba(168, 86, 68, 0.34);
+      border-color: rgba(234, 170, 153, 0.64);
+    }
+
+    .content table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 24px;
+      overflow: hidden;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+    }
+
+    .content thead {
+      background: var(--accent-soft);
+    }
+
+    .content th,
+    .content td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      font-size: 14px;
+    }
+
+    .content tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .content blockquote {
+      margin: 18px 0;
+      padding: 4px 0 4px 16px;
+      border-left: 4px solid var(--accent);
+      color: var(--muted);
+    }
+
+    .empty,
+    .error {
+      padding: 24px;
+      border-radius: 18px;
+      background: #fff7f3;
+      border: 1px solid #f0d7ca;
+      color: #8f4d32;
+    }
+
+    @media (max-width: 720px) {
+      .shell {
+        padding: 20px 14px 48px;
+      }
+
+      .panel {
+        border-radius: 20px;
+      }
+
+      .doc-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .toc {
+        position: static;
+        max-height: none;
+        border-right: 0;
+        border-bottom: 1px solid rgba(217, 209, 194, 0.75);
+      }
+
+      .content {
+        padding: 18px 16px 24px;
+      }
+
+      .content table {
+        display: block;
+        overflow-x: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <div class="eyebrow">Health-Go Docs</div>
+      <h1>智慧健康 API 文档</h1>
+      <p class="subtitle">这个页面会直接读取同目录下的 Markdown 文档并渲染成 HTML，适合在服务启动后通过浏览器查看接口说明。</p>
+    </section>
+
+    <div class="toolbar">
+      <div class="badge" id="statusBadge">准备加载文档...</div>
+      <a class="button" href="/docs/api.md" target="_blank" rel="noreferrer">查看原始 Markdown</a>
+    </div>
+
+    <section class="panel">
+      <div class="status" id="statusText">正在读取 <code>/docs/api.md</code></div>
+      <div class="doc-layout">
+        <aside class="toc">
+          <h2 class="toc-title">导航</h2>
+          <nav class="toc-list" id="toc">
+            <div class="empty">加载目录中...</div>
+          </nav>
+        </aside>
+        <article class="content" id="app">
+          <div class="empty">加载中...</div>
+        </article>
+      </div>
+    </section>
+  </div>
+
+  <script src="./vendor/marked.min.js"></script>
+  <script>
+    const markdownURL = '/docs/api.md';
+    const statusBadge = document.getElementById('statusBadge');
+    const statusText = document.getElementById('statusText');
+    const app = document.getElementById('app');
+    const toc = document.getElementById('toc');
+    const rawLink = document.querySelector('.button');
+    rawLink.href = markdownURL;
+
+    marked.setOptions({
+      gfm: true,
+      breaks: false,
+      headerIds: true,
+      mangle: false
+    });
+
+    async function loadMarkdown() {
+      try {
+        const response = await fetch(markdownURL, { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const markdown = await response.text();
+        if (!markdown.trim()) {
+          app.innerHTML = '<div class="empty">文档内容为空。</div>';
+          statusBadge.textContent = '文档为空';
+          statusText.textContent = '文档已加载，但没有可渲染内容';
+          return;
+        }
+
+        app.innerHTML = marked.parse(markdown);
+        enhanceCodeBlocks();
+        buildToc();
+        restoreHashPosition();
+        statusBadge.textContent = '文档加载完成';
+        statusText.innerHTML = '已成功渲染 <code>/docs/api.md</code>';
+      } catch (error) {
+        app.innerHTML = `<div class="error">文档加载失败：${error.message}</div>`;
+        toc.innerHTML = '<div class="error">目录加载失败</div>';
+        statusBadge.textContent = '加载失败';
+        statusText.textContent = '请确认服务已启动，且 /docs/api.md 可访问';
+      }
+    }
+
+    function slugify(text) {
+      return text
+        .trim()
+        .toLowerCase()
+        .replace(/[^\w\u4e00-\u9fa5\s.-]/g, '')
+        .replace(/\s+/g, '-');
+    }
+
+    function currentHashId() {
+      const raw = window.location.hash.replace(/^#/, '');
+      if (!raw) {
+        return '';
+      }
+      try {
+        return decodeURIComponent(raw);
+      } catch (error) {
+        return raw;
+      }
+    }
+
+    function restoreHashPosition() {
+      const id = currentHashId();
+      if (!id) {
+        return;
+      }
+      const target = document.getElementById(id);
+      if (!target) {
+        return;
+      }
+      target.scrollIntoView({ block: 'start' });
+      window.setTimeout(() => target.scrollIntoView({ block: 'start' }), 40);
+    }
+
+    function enhanceCodeBlocks() {
+      const blocks = Array.from(app.querySelectorAll('pre'));
+      blocks.forEach((block) => {
+        if (block.querySelector('.copy-button')) {
+          return;
+        }
+
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'copy-button';
+        button.textContent = '复制';
+
+        button.addEventListener('click', async () => {
+          const code = block.querySelector('code');
+          const text = code ? code.innerText : block.innerText;
+
+          try {
+            await navigator.clipboard.writeText(text);
+            button.textContent = '已复制';
+            button.classList.remove('failed');
+            button.classList.add('copied');
+          } catch (error) {
+            button.textContent = '复制失败';
+            button.classList.remove('copied');
+            button.classList.add('failed');
+          }
+
+          window.clearTimeout(button._resetTimer);
+          button._resetTimer = window.setTimeout(() => {
+            button.textContent = '复制';
+            button.classList.remove('copied', 'failed');
+          }, 1800);
+        });
+
+        block.appendChild(button);
+      });
+    }
+
+    function buildToc() {
+      const headings = Array.from(app.querySelectorAll('h1, h2, h3'));
+      if (!headings.length) {
+        toc.innerHTML = '<div class="empty">没有可导航的标题。</div>';
+        return;
+      }
+
+      const used = new Map();
+      toc.innerHTML = '';
+
+      headings.forEach((heading) => {
+        const level = Number(heading.tagName.substring(1));
+        const baseId = heading.id || slugify(heading.textContent) || `section-${used.size + 1}`;
+        const count = used.get(baseId) || 0;
+        const id = count ? `${baseId}-${count}` : baseId;
+        used.set(baseId, count + 1);
+        heading.id = id;
+
+        const link = document.createElement('a');
+        link.href = `#${id}`;
+        link.textContent = heading.textContent;
+        link.className = `level-${Math.min(level, 3)}`;
+        toc.appendChild(link);
+      });
+
+      const sections = Array.from(toc.querySelectorAll('a')).map((link) => {
+        const raw = link.hash.replace(/^#/, '');
+        let id = raw;
+        try {
+          id = decodeURIComponent(raw);
+        } catch (error) {
+          id = raw;
+        }
+        return {
+          link,
+          target: document.getElementById(id)
+        };
+      }).filter((section) => section.target);
+
+      let activeId = '';
+      const keepActiveLinkInView = (link) => {
+        if (!link) {
+          return;
+        }
+        const scroller = toc.closest('.toc') || toc;
+        const padding = 16;
+        const top = link.offsetTop;
+        const bottom = top + link.offsetHeight;
+        const viewTop = scroller.scrollTop;
+        const viewBottom = viewTop + scroller.clientHeight;
+        if (top < viewTop + padding) {
+          scroller.scrollTop = Math.max(0, top - padding);
+          return;
+        }
+        if (bottom > viewBottom - padding) {
+          scroller.scrollTop = bottom - scroller.clientHeight + padding;
+        }
+      };
+
+      const setActive = (id) => {
+        if (!id || id === activeId) {
+          return;
+        }
+        activeId = id;
+        let activeLink = null;
+        sections.forEach((section) => {
+          const isActive = section.target.id === id;
+          section.link.classList.toggle('active', isActive);
+          if (isActive) {
+            activeLink = section.link;
+          }
+        });
+        keepActiveLinkInView(activeLink);
+      };
+
+      const updateActive = () => {
+        if (!sections.length) {
+          return;
+        }
+
+        const triggerLine = Math.min(window.innerHeight * 0.28, 180);
+        let current = sections[0];
+
+        for (const section of sections) {
+          const top = section.target.getBoundingClientRect().top;
+          if (top <= triggerLine) {
+            current = section;
+          } else {
+            break;
+          }
+        }
+
+        const nearBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 8;
+        if (nearBottom) {
+          current = sections[sections.length - 1];
+        }
+
+        setActive(current.target.id);
+      };
+
+      sections.forEach((section) => {
+        section.link.addEventListener('click', () => {
+          setActive(section.target.id);
+        });
+      });
+
+      updateActive();
+      window.addEventListener('scroll', updateActive, { passive: true });
+      window.addEventListener('resize', updateActive, { passive: true });
+    }
+
+    window.addEventListener('hashchange', restoreHashPosition, { passive: true });
+    loadMarkdown();
+  </script>
+</body>
+</html>
